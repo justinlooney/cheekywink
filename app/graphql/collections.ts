@@ -1,26 +1,22 @@
 import {PRODUCT_CARD_FRAGMENT} from '~/graphql/fragments';
 
-// Homepage hero collection — small first paint, fetched at the edge and cached.
+// Homepage hero collection — fetched by handle so YOU control what's featured.
+// Change the handle in app/routes/_index.tsx (FEATURED_HANDLE).
 export const FEATURED_COLLECTION_QUERY = `#graphql
   ${PRODUCT_CARD_FRAGMENT}
-  query FeaturedCollection($country: CountryCode, $language: LanguageCode)
-  @inContext(country: $country, language: $language) {
-    collections(first: 1, sortKey: UPDATED_AT, reverse: true) {
-      nodes {
-        id
-        title
-        handle
-        description
-        image {
-          url
-          altText
-          width
-          height
-        }
-        products(first: 8) {
-          nodes {
-            ...ProductCard
-          }
+  query FeaturedCollection(
+    $handle: String!
+    $country: CountryCode
+    $language: LanguageCode
+  ) @inContext(country: $country, language: $language) {
+    collection(handle: $handle) {
+      id
+      title
+      handle
+      description
+      products(first: 12) {
+        nodes {
+          ...ProductCard
         }
       }
     }

@@ -24,10 +24,17 @@ export const meta: Route.MetaFunction = () => [
   },
 ];
 
+// 👉 CHANGE THIS to feature a different collection in the hero + "Just dropped"
+// grid. Must be a real collection handle with products + images. Good full
+// options: 'home-page' (408), 'sale' (115), 'dresses-and-skirts' (61).
+const FEATURED_HANDLE = 'home-page';
+
 // Awaited (small query) so the hero carousel has real product photos at mount.
 export async function loader({context}: Route.LoaderArgs) {
-  const {collections} = await context.storefront.query(FEATURED_COLLECTION_QUERY);
-  const products = collections?.nodes?.[0]?.products?.nodes ?? [];
+  const {collection} = await context.storefront.query(FEATURED_COLLECTION_QUERY, {
+    variables: {handle: FEATURED_HANDLE},
+  });
+  const products = collection?.products?.nodes ?? [];
   const heroItems = products
     .map((p) => ({
       url: p.featuredImage?.url ?? '',
@@ -88,13 +95,13 @@ export default function Homepage() {
             {/* Primary CTA — magnetic. Adjust handles to your real collections. */}
             <MagneticButton
               as="a"
-              href="/collections/new"
+              href="/collections/new-arrivals"
               className="inline-block rounded-full bg-gold px-10 py-4 text-sm font-medium uppercase tracking-widest text-ink transition-colors hover:bg-cream"
             >
               Shop New Arrivals
             </MagneticButton>
             <a
-              href="/collections/all"
+              href="/collections/handbags-and-totes"
               className="inline-block rounded-full border border-cream/40 px-10 py-4 text-sm uppercase tracking-widest text-cream backdrop-blur-sm transition-colors hover:bg-cream hover:text-ink"
             >
               Explore Handbags

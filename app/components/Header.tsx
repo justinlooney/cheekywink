@@ -48,9 +48,10 @@ export function Header() {
           The Cheeky Wink
         </Link>
         <nav className="hidden gap-8 text-sm uppercase tracking-widest text-cream md:flex">
-          <Link to="/collections/all" prefetch="intent">Shop</Link>
-          <Link to="/collections/new" prefetch="intent">New</Link>
-          <Link to="/pages/about" prefetch="intent">About</Link>
+          <Link to="/collections/all" prefetch="intent">Shop All</Link>
+          <Link to="/collections/dresses-and-skirts" prefetch="intent">Dresses</Link>
+          <Link to="/collections/handbags-and-totes" prefetch="intent">Handbags</Link>
+          <Link to="/collections/sale" prefetch="intent">Sale</Link>
         </nav>
         <button
           onClick={() => setCartOpen(true)}

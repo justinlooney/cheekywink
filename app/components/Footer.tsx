@@ -18,18 +18,24 @@ export function Footer() {
       <div className="mt-16 grid grid-cols-2 gap-8 text-sm uppercase tracking-widest md:grid-cols-4">
         <div className="space-y-3">
           <p className="text-cream/40">Shop</p>
-          <Link to="/collections/all" className="block hover:text-rose">All</Link>
-          <Link to="/collections/new" className="block hover:text-rose">New In</Link>
+          <Link to="/collections/new-arrivals" className="block hover:text-rose">New Arrivals</Link>
+          <Link to="/collections/dresses-and-skirts" className="block hover:text-rose">Dresses</Link>
+          <Link to="/collections/handbags-and-totes" className="block hover:text-rose">Handbags</Link>
+          <Link to="/collections/sale" className="block hover:text-rose">Sale</Link>
+        </div>
+        <div className="space-y-3">
+          <p className="text-cream/40">Categories</p>
+          <Link to="/collections/denim-collection" className="block hover:text-rose">Denim</Link>
+          <Link to="/collections/accessories" className="block hover:text-rose">Jewelry</Link>
+          <Link to="/collections/shoes" className="block hover:text-rose">Shoes</Link>
+          <Link to="/collections/loungewear-and-pajamas" className="block hover:text-rose">Loungewear</Link>
         </div>
         <div className="space-y-3">
           <p className="text-cream/40">Help</p>
-          <Link to="/pages/shipping" className="block hover:text-rose">Shipping</Link>
-          <Link to="/pages/returns" className="block hover:text-rose">Returns</Link>
-        </div>
-        <div className="space-y-3">
-          <p className="text-cream/40">Company</p>
-          <Link to="/pages/about" className="block hover:text-rose">About</Link>
-          <Link to="/pages/contact" className="block hover:text-rose">Contact</Link>
+          {/* Shopify auto-creates /policies/* when you set store policies. */}
+          <Link to="/policies/shipping-policy" className="block hover:text-rose">Shipping</Link>
+          <Link to="/policies/refund-policy" className="block hover:text-rose">Returns</Link>
+          <Link to="/policies/privacy-policy" className="block hover:text-rose">Privacy</Link>
         </div>
         <div className="space-y-3">
           <p className="text-cream/40">Social</p>
