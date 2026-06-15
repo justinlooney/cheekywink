@@ -643,3 +643,33 @@ button.reset:hover:not(:has(> *)) {
   gap: 0.75rem;
   flex-wrap: wrap;
 }
+/* ─────────────────────────────────────────────────────────────────────────
+   APPEND THIS to app/styles/app.css (it loads last, so it wins over the
+   scaffold defaults). Sets the dark brand canvas + smooth-scroll + a11y guard.
+   ───────────────────────────────────────────────────────────────────────── */
+body {
+  background: #0e0b10; /* ink */
+  color: #f7f2ec;      /* cream */
+  font-family: 'Inter', system-ui, sans-serif;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Lenis smooth-scroll housekeeping */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+/* Accessibility: hard kill-switch regardless of JS state */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

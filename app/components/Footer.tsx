@@ -1,129 +1,45 @@
-import {Suspense} from 'react';
-import {Await, NavLink} from 'react-router';
-import type {FooterQuery, HeaderQuery} from 'storefrontapi.generated';
+import {Link} from 'react-router';
+import {useTextReveal} from '~/animation/useTextReveal';
 
-interface FooterProps {
-  footer: Promise<FooterQuery | null>;
-  header: HeaderQuery;
-  publicStoreDomain: string;
-}
-
-export function Footer({
-  footer: footerPromise,
-  header,
-  publicStoreDomain,
-}: FooterProps) {
+/**
+ * Oversized "outro" footer — a hallmark of award sites. The wordmark reveals on
+ * scroll-in via the SplitText-free text reveal hook.
+ */
+export function Footer() {
+  const heading = useTextReveal<HTMLHeadingElement>();
   return (
-    <Suspense>
-      <Await resolve={footerPromise}>
-        {(footer) => (
-          <footer className="footer">
-            {footer?.menu && header.shop.primaryDomain?.url && (
-              <FooterMenu
-                menu={footer.menu}
-                primaryDomainUrl={header.shop.primaryDomain.url}
-                publicStoreDomain={publicStoreDomain}
-              />
-            )}
-          </footer>
-        )}
-      </Await>
-    </Suspense>
+    <footer className="bg-ink px-6 py-20 text-cream md:px-10">
+      <h2
+        ref={heading}
+        className="font-display text-fluid-xl leading-[0.9] text-blush"
+      >
+        Wink back.
+      </h2>
+      <div className="mt-16 grid grid-cols-2 gap-8 text-sm uppercase tracking-widest md:grid-cols-4">
+        <div className="space-y-3">
+          <p className="text-cream/40">Shop</p>
+          <Link to="/collections/all" className="block hover:text-rose">All</Link>
+          <Link to="/collections/new" className="block hover:text-rose">New In</Link>
+        </div>
+        <div className="space-y-3">
+          <p className="text-cream/40">Help</p>
+          <Link to="/pages/shipping" className="block hover:text-rose">Shipping</Link>
+          <Link to="/pages/returns" className="block hover:text-rose">Returns</Link>
+        </div>
+        <div className="space-y-3">
+          <p className="text-cream/40">Company</p>
+          <Link to="/pages/about" className="block hover:text-rose">About</Link>
+          <Link to="/pages/contact" className="block hover:text-rose">Contact</Link>
+        </div>
+        <div className="space-y-3">
+          <p className="text-cream/40">Social</p>
+          <a href="https://instagram.com" className="block hover:text-rose">Instagram</a>
+          <a href="https://tiktok.com" className="block hover:text-rose">TikTok</a>
+        </div>
+      </div>
+      <p className="mt-16 text-xs text-cream/30">
+        © {new Date().getFullYear()} The Cheeky Wink. All rights reserved.
+      </p>
+    </footer>
   );
-}
-
-function FooterMenu({
-  menu,
-  primaryDomainUrl,
-  publicStoreDomain,
-}: {
-  menu: FooterQuery['menu'];
-  primaryDomainUrl: FooterProps['header']['shop']['primaryDomain']['url'];
-  publicStoreDomain: string;
-}) {
-  return (
-    <nav className="footer-menu" role="navigation">
-      {(menu || FALLBACK_FOOTER_MENU).items.map((item) => {
-        if (!item.url) return null;
-        // if the url is internal, we strip the domain
-        const url =
-          item.url.includes('myshopify.com') ||
-          item.url.includes(publicStoreDomain) ||
-          item.url.includes(primaryDomainUrl)
-            ? new URL(item.url).pathname
-            : item.url;
-        const isExternal = !url.startsWith('/');
-        return isExternal ? (
-          <a href={url} key={item.id} rel="noopener noreferrer" target="_blank">
-            {item.title}
-          </a>
-        ) : (
-          <NavLink
-            end
-            key={item.id}
-            prefetch="intent"
-            style={activeLinkStyle}
-            to={url}
-          >
-            {item.title}
-          </NavLink>
-        );
-      })}
-    </nav>
-  );
-}
-
-const FALLBACK_FOOTER_MENU = {
-  id: 'gid://shopify/Menu/199655620664',
-  items: [
-    {
-      id: 'gid://shopify/MenuItem/461633060920',
-      resourceId: 'gid://shopify/ShopPolicy/23358046264',
-      tags: [],
-      title: 'Privacy Policy',
-      type: 'SHOP_POLICY',
-      url: '/policies/privacy-policy',
-      items: [],
-    },
-    {
-      id: 'gid://shopify/MenuItem/461633093688',
-      resourceId: 'gid://shopify/ShopPolicy/23358013496',
-      tags: [],
-      title: 'Refund Policy',
-      type: 'SHOP_POLICY',
-      url: '/policies/refund-policy',
-      items: [],
-    },
-    {
-      id: 'gid://shopify/MenuItem/461633126456',
-      resourceId: 'gid://shopify/ShopPolicy/23358111800',
-      tags: [],
-      title: 'Shipping Policy',
-      type: 'SHOP_POLICY',
-      url: '/policies/shipping-policy',
-      items: [],
-    },
-    {
-      id: 'gid://shopify/MenuItem/461633159224',
-      resourceId: 'gid://shopify/ShopPolicy/23358079032',
-      tags: [],
-      title: 'Terms of Service',
-      type: 'SHOP_POLICY',
-      url: '/policies/terms-of-service',
-      items: [],
-    },
-  ],
-};
-
-function activeLinkStyle({
-  isActive,
-  isPending,
-}: {
-  isActive: boolean;
-  isPending: boolean;
-}) {
-  return {
-    fontWeight: isActive ? 'bold' : undefined,
-    color: isPending ? 'grey' : 'white',
-  };
 }

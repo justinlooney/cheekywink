@@ -1,177 +1,118 @@
-import {Await, useLoaderData, Link} from 'react-router';
 import type {Route} from './+types/_index';
-import {Suspense} from 'react';
-import {Image} from '@shopify/hydrogen';
-import type {
-  FeaturedCollectionFragment,
-  RecommendedProductsQuery,
-} from 'storefrontapi.generated';
-import {ProductItem} from '~/components/ProductItem';
-import {MockShopNotice} from '~/components/MockShopNotice';
+import {useLoaderData} from 'react-router';
+import {lazy, Suspense, useRef} from 'react';
+import {FEATURED_COLLECTION_QUERY} from '~/graphql/collections';
+import {ClientOnly} from '~/components/ClientOnly';
+import {ProductCard} from '~/components/ProductCard';
+import {MagneticButton} from '~/components/MagneticButton';
+import {useTextReveal} from '~/animation/useTextReveal';
+import {useScrollReveal} from '~/animation/useScrollReveal';
+import {gsap} from '~/animation/gsap';
+import {useGsapContext} from '~/animation/useGsapContext';
 
-export const meta: Route.MetaFunction = () => {
-  return [{title: 'Hydrogen | Home'}];
-};
+// Lazy + client-only: keeps Three.js / react-reconciler out of the SSR bundle.
+const HeroScene = lazy(() =>
+  import('~/three/HeroScene').then((m) => ({default: m.HeroScene})),
+);
 
-export async function loader(args: Route.LoaderArgs) {
-  // Start fetching non-critical data without blocking time to first byte
-  const deferredData = loadDeferredData(args);
+export const meta: Route.MetaFunction = () => [
+  {title: 'The Cheeky Wink — Elevate Your Everyday Style'},
+  {
+    name: 'description',
+    content:
+      'Handbags, outfits, and accessories curated for the modern trendsetter.',
+  },
+];
 
-  // Await the critical data required to render initial state of the page
-  const criticalData = await loadCriticalData(args);
-
-  return {...deferredData, ...criticalData};
-}
-
-/**
- * Load data necessary for rendering content above the fold. This is the critical data
- * needed to render the page. If it's unavailable, the whole page should 400 or 500 error.
- */
-async function loadCriticalData({context}: Route.LoaderArgs) {
-  const [{collections}] = await Promise.all([
-    context.storefront.query(FEATURED_COLLECTION_QUERY),
-    // Add other queries here, so that they are loaded in parallel
-  ]);
-
-  return {
-    isShopLinked: Boolean(context.env.PUBLIC_STORE_DOMAIN),
-    featuredCollection: collections.nodes[0],
-  };
-}
-
-/**
- * Load data for rendering content below the fold. This data is deferred and will be
- * fetched after the initial page load. If it's unavailable, the page should still 200.
- * Make sure to not throw any errors here, as it will cause the page to 500.
- */
-function loadDeferredData({context}: Route.LoaderArgs) {
-  const recommendedProducts = context.storefront
-    .query(RECOMMENDED_PRODUCTS_QUERY)
-    .catch((error: Error) => {
-      // Log query errors, but don't throw them so the page can still render
-      console.error(error);
-      return null;
-    });
-
-  return {
-    recommendedProducts,
-  };
+// Awaited (small query) so the hero carousel has real product photos at mount.
+export async function loader({context}: Route.LoaderArgs) {
+  const {collections} = await context.storefront.query(FEATURED_COLLECTION_QUERY);
+  const products = collections?.nodes?.[0]?.products?.nodes ?? [];
+  const heroItems = products
+    .map((p) => ({
+      url: p.featuredImage?.url ?? '',
+      handle: p.handle,
+      title: p.title,
+    }))
+    .filter((i) => Boolean(i.url))
+    .slice(0, 8);
+  return {products, heroItems};
 }
 
 export default function Homepage() {
-  const data = useLoaderData<typeof loader>();
-  return (
-    <div className="home">
-      {data.isShopLinked ? null : <MockShopNotice />}
-      <FeaturedCollection collection={data.featuredCollection} />
-      <RecommendedProducts products={data.recommendedProducts} />
-    </div>
-  );
-}
+  const {products, heroItems} = useLoaderData<typeof loader>();
+  const hero = useRef<HTMLDivElement>(null);
+  const title = useTextReveal<HTMLHeadingElement>();
+  const grid = useScrollReveal<HTMLDivElement>({selector: '.reveal-card'});
 
-function FeaturedCollection({
-  collection,
-}: {
-  collection: FeaturedCollectionFragment;
-}) {
-  if (!collection) return null;
-  const image = collection?.image;
-  return (
-    <Link
-      className="featured-collection"
-      to={`/collections/${collection.handle}`}
-    >
-      {image && (
-        <div className="featured-collection-image">
-          <Image
-            data={image}
-            sizes="100vw"
-            alt={image.altText || collection.title}
-          />
-        </div>
-      )}
-      <h1>{collection.title}</h1>
-    </Link>
-  );
-}
+  useGsapContext(hero, () => {
+    gsap.to('.hero-copy', {
+      yPercent: -40,
+      ease: 'none',
+      scrollTrigger: {
+        trigger: hero.current!,
+        start: 'top top',
+        end: 'bottom top',
+        scrub: true,
+      },
+    });
+  });
 
-function RecommendedProducts({
-  products,
-}: {
-  products: Promise<RecommendedProductsQuery | null>;
-}) {
   return (
-    <section
-      className="recommended-products"
-      aria-labelledby="recommended-products"
-    >
-      <h2 id="recommended-products">Recommended Products</h2>
-      <Suspense fallback={<div>Loading...</div>}>
-        <Await resolve={products}>
-          {(response) => (
-            <div className="recommended-products-grid">
-              {response
-                ? response.products.nodes.map((product) => (
-                    <ProductItem key={product.id} product={product} />
-                  ))
-                : null}
-            </div>
+    <>
+      <section
+        ref={hero}
+        className="relative flex h-[100svh] items-end overflow-hidden px-6 pb-20 md:px-10"
+      >
+        <ClientOnly>
+          {() => (
+            <Suspense fallback={null}>
+              <HeroScene items={heroItems} />
+            </Suspense>
           )}
-        </Await>
-      </Suspense>
-      <br />
-    </section>
+        </ClientOnly>
+        <div className="hero-copy relative z-10 max-w-2xl">
+          <p className="mb-4 text-sm uppercase tracking-[0.3em] text-gold/90">
+            New Season · Editorial
+          </p>
+          <h1
+            ref={title}
+            className="font-display text-fluid-xl font-semibold leading-[0.95] text-cream"
+          >
+            Elevate Your Everyday Style
+          </h1>
+          <p className="mt-6 max-w-md font-body text-fluid-md font-light text-blush/80">
+            Handbags, outfits, and accessories curated for the modern trendsetter.
+          </p>
+          <div className="mt-10 flex flex-wrap items-center gap-4">
+            {/* Primary CTA — magnetic. Adjust handles to your real collections. */}
+            <MagneticButton
+              as="a"
+              href="/collections/new"
+              className="inline-block rounded-full bg-gold px-10 py-4 text-sm font-medium uppercase tracking-widest text-ink transition-colors hover:bg-cream"
+            >
+              Shop New Arrivals
+            </MagneticButton>
+            <a
+              href="/collections/all"
+              className="inline-block rounded-full border border-cream/40 px-10 py-4 text-sm uppercase tracking-widest text-cream backdrop-blur-sm transition-colors hover:bg-cream hover:text-ink"
+            >
+              Explore Handbags
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-ink px-6 py-24 md:px-10">
+        <h2 className="mb-12 font-display text-fluid-lg text-blush">Just dropped</h2>
+        <div ref={grid} className="grid grid-cols-2 gap-4 md:grid-cols-4 md:gap-6">
+          {products.map((p, i) => (
+            <div className="reveal-card" key={p.id}>
+              <ProductCard product={p} loading={i < 4 ? 'eager' : 'lazy'} />
+            </div>
+          ))}
+        </div>
+      </section>
+    </>
   );
 }
-
-const FEATURED_COLLECTION_QUERY = `#graphql
-  fragment FeaturedCollection on Collection {
-    id
-    title
-    image {
-      id
-      url
-      altText
-      width
-      height
-    }
-    handle
-  }
-  query FeaturedCollection($country: CountryCode, $language: LanguageCode)
-    @inContext(country: $country, language: $language) {
-    collections(first: 1, sortKey: UPDATED_AT, reverse: true) {
-      nodes {
-        ...FeaturedCollection
-      }
-    }
-  }
-` as const;
-
-const RECOMMENDED_PRODUCTS_QUERY = `#graphql
-  fragment RecommendedProduct on Product {
-    id
-    title
-    handle
-    priceRange {
-      minVariantPrice {
-        amount
-        currencyCode
-      }
-    }
-    featuredImage {
-      id
-      url
-      altText
-      width
-      height
-    }
-  }
-  query RecommendedProducts ($country: CountryCode, $language: LanguageCode)
-    @inContext(country: $country, language: $language) {
-    products(first: 4, sortKey: UPDATED_AT, reverse: true) {
-      nodes {
-        ...RecommendedProduct
-      }
-    }
-  }
-` as const;
