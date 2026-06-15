@@ -1,12 +1,15 @@
 import type {Route} from './+types/_index';
-import {useLoaderData} from 'react-router';
+import {useLoaderData, Link} from 'react-router';
 import {lazy, Suspense, useRef} from 'react';
-import {FEATURED_COLLECTION_QUERY} from '~/graphql/collections';
+import {
+  FEATURED_COLLECTION_QUERY,
+  HOME_COLLECTIONS_QUERY,
+} from '~/graphql/collections';
 import {ClientOnly} from '~/components/ClientOnly';
-import {ProductCard} from '~/components/ProductCard';
+import {CategoryTiles, type CategoryTile} from '~/components/CategoryTiles';
+import {ProductRow} from '~/components/ProductRow';
 import {MagneticButton} from '~/components/MagneticButton';
 import {useTextReveal} from '~/animation/useTextReveal';
-import {useScrollReveal} from '~/animation/useScrollReveal';
 import {gsap} from '~/animation/gsap';
 import {useGsapContext} from '~/animation/useGsapContext';
 
@@ -15,42 +18,69 @@ const HeroScene = lazy(() =>
   import('~/three/HeroScene').then((m) => ({default: m.HeroScene})),
 );
 
+// 👉 Collection featured in the 3D hero carousel. Full options if Best Sellers
+// is sparse: 'home-page' (408), 'sale' (115), 'dresses-and-skirts' (61).
+const FEATURED_HANDLE = 'best-sellers';
+
 export const meta: Route.MetaFunction = () => [
   {title: 'The Cheeky Wink — Elevate Your Everyday Style'},
   {
     name: 'description',
     content:
-      'Handbags, outfits, and accessories curated for the modern trendsetter.',
+      'Dresses, denim, handbags, and accessories curated for the modern trendsetter.',
   },
 ];
 
-// 👉 CHANGE THIS to feature a different collection in the hero + "Just dropped"
-// grid. Must be a real collection handle with products + images. Good full
-// options: 'home-page' (408), 'sale' (115), 'dresses-and-skirts' (61).
-const FEATURED_HANDLE = 'home-page';
-
-// Awaited (small query) so the hero carousel has real product photos at mount.
 export async function loader({context}: Route.LoaderArgs) {
-  const {collection} = await context.storefront.query(FEATURED_COLLECTION_QUERY, {
-    variables: {handle: FEATURED_HANDLE},
-  });
-  const products = collection?.products?.nodes ?? [];
-  const heroItems = products
-    .map((p) => ({
-      url: p.featuredImage?.url ?? '',
-      handle: p.handle,
-      title: p.title,
-    }))
+  const {storefront} = context;
+  // Hero feed + all merchandising collections, fetched in parallel at the edge.
+  const [featuredRes, home] = await Promise.all([
+    storefront.query(FEATURED_COLLECTION_QUERY, {
+      variables: {handle: FEATURED_HANDLE},
+    }),
+    storefront.query(HOME_COLLECTIONS_QUERY),
+  ]);
+
+  const heroItems = (featuredRes.collection?.products?.nodes ?? [])
+    .map((p) => ({url: p.featuredImage?.url ?? '', handle: p.handle, title: p.title}))
     .filter((i) => Boolean(i.url))
     .slice(0, 8);
-  return {products, heroItems};
+
+  // Build category tiles (image falls back to the first product's photo).
+  const tile = (col: any, title: string): CategoryTile | null =>
+    col
+      ? {handle: col.handle, title, image: col.image ?? col.products?.nodes?.[0]?.featuredImage ?? null}
+      : null;
+  const tiles = [
+    tile(home.dresses, 'Dresses'),
+    tile(home.handbags, 'Handbags'),
+    tile(home.denim, 'Denim'),
+    tile(home.shoes, 'Shoes'),
+    tile(home.swimwear, 'Swimwear'),
+    tile(home.accessories, 'Jewelry'),
+    tile(home.tees, 'Tops'),
+    tile(home.sale, 'Sale'),
+  ].filter(Boolean) as CategoryTile[];
+
+  // Build product rows (skips empty collections automatically).
+  const row = (col: any, title: string) =>
+    col?.products?.nodes?.length
+      ? {title, handle: col.handle, products: col.products.nodes}
+      : null;
+  const rows = [
+    row(home.newArrivals, 'New Arrivals'),
+    row(home.bestSellers, 'Best Sellers'),
+    row(home.dresses, 'Dresses & Skirts'),
+    row(home.denim, 'The Denim Edit'),
+  ].filter(Boolean) as {title: string; handle: string; products: any[]}[];
+
+  return {heroItems, tiles, rows};
 }
 
 export default function Homepage() {
-  const {products, heroItems} = useLoaderData<typeof loader>();
+  const {heroItems, tiles, rows} = useLoaderData<typeof loader>();
   const hero = useRef<HTMLDivElement>(null);
   const title = useTextReveal<HTMLHeadingElement>();
-  const grid = useScrollReveal<HTMLDivElement>({selector: '.reveal-card'});
 
   useGsapContext(hero, () => {
     gsap.to('.hero-copy', {
@@ -67,6 +97,7 @@ export default function Homepage() {
 
   return (
     <>
+      {/* ── Hero ─────────────────────────────────────────────── */}
       <section
         ref={hero}
         className="relative flex h-[100svh] items-end overflow-hidden px-6 pb-20 md:px-10"
@@ -89,10 +120,10 @@ export default function Homepage() {
             Elevate Your Everyday Style
           </h1>
           <p className="mt-6 max-w-md font-body text-fluid-md font-light text-blush/80">
-            Handbags, outfits, and accessories curated for the modern trendsetter.
+            Dresses, denim, handbags, and accessories curated for the modern
+            trendsetter.
           </p>
           <div className="mt-10 flex flex-wrap items-center gap-4">
-            {/* Primary CTA — magnetic. Adjust handles to your real collections. */}
             <MagneticButton
               as="a"
               href="/collections/new-arrivals"
@@ -110,16 +141,38 @@ export default function Homepage() {
         </div>
       </section>
 
-      <section className="bg-ink px-6 py-24 md:px-10">
-        <h2 className="mb-12 font-display text-fluid-lg text-blush">Just dropped</h2>
-        <div ref={grid} className="grid grid-cols-2 gap-4 md:grid-cols-4 md:gap-6">
-          {products.map((p, i) => (
-            <div className="reveal-card" key={p.id}>
-              <ProductCard product={p} loading={i < 4 ? 'eager' : 'lazy'} />
-            </div>
-          ))}
-        </div>
+      {/* ── Shop by category ─────────────────────────────────── */}
+      <CategoryTiles tiles={tiles} />
+
+      {/* ── Merchandised product rows ────────────────────────── */}
+      {rows.slice(0, 2).map((r) => (
+        <ProductRow key={r.handle} title={r.title} handle={r.handle} products={r.products} />
+      ))}
+
+      {/* ── Sale banner ──────────────────────────────────────── */}
+      <section className="px-6 py-10 md:px-10">
+        <Link
+          to="/collections/sale"
+          prefetch="intent"
+          className="group relative flex h-[40vh] items-center justify-center overflow-hidden rounded-2xl bg-wine text-center"
+        >
+          <div className="relative z-10">
+            <p className="mb-3 text-sm uppercase tracking-[0.3em] text-blush/80">
+              Up to 50% off
+            </p>
+            <h2 className="font-display text-fluid-lg text-cream">The Sale Edit</h2>
+            <span className="mt-6 inline-block text-sm uppercase tracking-widest text-cream/80 underline-offset-4 group-hover:underline">
+              Shop the sale →
+            </span>
+          </div>
+          <div className="absolute inset-0 bg-gradient-to-r from-wine via-rose/30 to-wine opacity-60 transition-opacity duration-700 group-hover:opacity-90" />
+        </Link>
       </section>
+
+      {/* ── Remaining rows ───────────────────────────────────── */}
+      {rows.slice(2).map((r) => (
+        <ProductRow key={r.handle} title={r.title} handle={r.handle} products={r.products} />
+      ))}
     </>
   );
 }
