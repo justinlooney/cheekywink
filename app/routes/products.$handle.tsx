@@ -12,6 +12,8 @@ import {
   Analytics,
 } from '@shopify/hydrogen';
 import {AddToCartButton} from '~/components/AddToCartButton';
+import {ProductRow} from '~/components/ProductRow';
+import {PRODUCT_CARD_FRAGMENT} from '~/graphql/fragments';
 import {gsap} from '~/animation/gsap';
 import {useGsapContext} from '~/animation/useGsapContext';
 
@@ -74,6 +76,25 @@ const PRODUCT_QUERY = `#graphql
   }
 ` as const;
 
+// "Complete the Look" — Shopify's own recommendation engine, not a fabricated
+// AI stylist. COMPLEMENTARY favors merchant-configured "goes with this"
+// pairings (Shopify admin → Search & Discovery); RELATED is Shopify's
+// always-available automatic algorithm. We prefer complementary and fall
+// back to related only when no complementary pairings are configured.
+const RECOMMENDATIONS_QUERY = `#graphql
+  ${PRODUCT_CARD_FRAGMENT}
+  query ProductRecommendations(
+    $productId: ID!
+    $intent: ProductRecommendationIntent
+    $country: CountryCode
+    $language: LanguageCode
+  ) @inContext(country: $country, language: $language) {
+    productRecommendations(productId: $productId, intent: $intent) {
+      ...ProductCard
+    }
+  }
+` as const;
+
 export const meta: Route.MetaFunction = ({data}) => [
   {title: `${data?.product?.title ?? 'Product'} — The Cheeky Wink`},
   {name: 'description', content: data?.product?.seo?.description ?? ''},
@@ -88,11 +109,24 @@ export async function loader({params, request, context}: Route.LoaderArgs) {
   });
 
   if (!product?.id) throw new Response('Not found', {status: 404});
-  return {product};
+
+  const [complementaryRes, relatedRes] = await Promise.all([
+    context.storefront.query(RECOMMENDATIONS_QUERY, {
+      variables: {productId: product.id, intent: 'COMPLEMENTARY'},
+    }),
+    context.storefront.query(RECOMMENDATIONS_QUERY, {
+      variables: {productId: product.id, intent: 'RELATED'},
+    }),
+  ]);
+  const recommendations = complementaryRes.productRecommendations?.length
+    ? complementaryRes.productRecommendations
+    : (relatedRes.productRecommendations ?? []);
+
+  return {product, recommendations};
 }
 
 export default function Product() {
-  const {product} = useLoaderData<typeof loader>();
+  const {product, recommendations} = useLoaderData<typeof loader>();
   const scope = useRef<HTMLDivElement>(null);
 
   const selectedVariant = useOptimisticVariant(
@@ -116,137 +150,141 @@ export default function Product() {
   });
 
   return (
-    <div
-      ref={scope}
-      className="grid gap-10 px-6 pb-24 pt-28 md:grid-cols-2 md:gap-16 md:px-10"
-    >
-      {/* Media */}
-      <div className="space-y-4">
-        {selectedVariant?.image ? (
-          <div className="pdp-media overflow-hidden rounded-2xl">
-            <Image
-              data={selectedVariant.image}
-              sizes="(min-width:768px) 50vw, 100vw"
-              className="w-full object-cover"
-            />
-          </div>
-        ) : null}
-        {images?.map((m: any) => (
-          <div key={m.id} className="pdp-media overflow-hidden rounded-2xl">
-            <Image data={m.image} sizes="(min-width:768px) 50vw, 100vw" />
-          </div>
-        ))}
-      </div>
-
-      {/* Info */}
-      <div className="pdp-info md:sticky md:top-28 md:h-fit">
-        {product.vendor ? (
-          <p className="text-sm uppercase tracking-widest text-rose">{product.vendor}</p>
-        ) : null}
-        <h1 className="mt-2 font-display text-fluid-lg text-cream">{product.title}</h1>
-        {selectedVariant?.price ? (
-          <div className="mt-4 flex items-baseline gap-3">
-            <Money data={selectedVariant.price} className="text-xl text-blush" />
-            {selectedVariant.compareAtPrice &&
-            Number(selectedVariant.compareAtPrice.amount) >
-              Number(selectedVariant.price.amount) ? (
-              <Money
-                data={selectedVariant.compareAtPrice}
-                className="text-ink/40 text-cream/40 line-through"
+    <>
+      <div
+        ref={scope}
+        className="grid gap-10 px-6 pb-24 pt-28 md:grid-cols-2 md:gap-16 md:px-10"
+      >
+        {/* Media */}
+        <div className="space-y-4">
+          {selectedVariant?.image ? (
+            <div className="pdp-media overflow-hidden rounded-2xl">
+              <Image
+                data={selectedVariant.image}
+                sizes="(min-width:768px) 50vw, 100vw"
+                className="w-full object-cover"
               />
-            ) : null}
-          </div>
-        ) : null}
+            </div>
+          ) : null}
+          {images?.map((m: any) => (
+            <div key={m.id} className="pdp-media overflow-hidden rounded-2xl">
+              <Image data={m.image} sizes="(min-width:768px) 50vw, 100vw" />
+            </div>
+          ))}
+        </div>
 
-        {/* Variant options */}
-        <div className="mt-8 space-y-6">
-          {productOptions.map((option) => {
-            if (option.optionValues.length === 1) return null;
-            return (
-              <div key={option.name}>
-                <p className="mb-3 text-sm uppercase tracking-widest text-cream/60">
-                  {option.name}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {option.optionValues.map((value) => {
-                    const {
-                      name,
-                      handle,
-                      variantUriQuery,
-                      selected,
-                      available,
-                      exists,
-                      isDifferentProduct,
-                    } = value;
-                    const className = `rounded-full border px-5 py-2 text-sm transition-colors ${
-                      selected
-                        ? 'border-rose bg-rose text-ink'
-                        : 'border-cream/30 text-cream hover:border-cream'
-                    } ${available ? '' : 'opacity-40'}`;
-                    return isDifferentProduct ? (
-                      <Link
-                        key={option.name + name}
-                        to={`/products/${handle}?${variantUriQuery}`}
-                        prefetch="intent"
-                        className={className}
-                      >
-                        {name}
-                      </Link>
-                    ) : (
-                      <Link
-                        key={option.name + name}
-                        to={`?${variantUriQuery}`}
-                        replace
-                        preventScrollReset
-                        aria-disabled={!exists}
-                        className={className}
-                      >
-                        {name}
-                      </Link>
-                    );
-                  })}
+        {/* Info */}
+        <div className="pdp-info md:sticky md:top-28 md:h-fit">
+          {product.vendor ? (
+            <p className="text-sm uppercase tracking-widest text-rose">{product.vendor}</p>
+          ) : null}
+          <h1 className="mt-2 font-display text-fluid-lg text-cream">{product.title}</h1>
+          {selectedVariant?.price ? (
+            <div className="mt-4 flex items-baseline gap-3">
+              <Money data={selectedVariant.price} className="text-xl text-blush" />
+              {selectedVariant.compareAtPrice &&
+              Number(selectedVariant.compareAtPrice.amount) >
+                Number(selectedVariant.price.amount) ? (
+                <Money
+                  data={selectedVariant.compareAtPrice}
+                  className="text-ink/40 text-cream/40 line-through"
+                />
+              ) : null}
+            </div>
+          ) : null}
+
+          {/* Variant options */}
+          <div className="mt-8 space-y-6">
+            {productOptions.map((option) => {
+              if (option.optionValues.length === 1) return null;
+              return (
+                <div key={option.name}>
+                  <p className="mb-3 text-sm uppercase tracking-widest text-cream/60">
+                    {option.name}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {option.optionValues.map((value) => {
+                      const {
+                        name,
+                        handle,
+                        variantUriQuery,
+                        selected,
+                        available,
+                        exists,
+                        isDifferentProduct,
+                      } = value;
+                      const className = `rounded-full border px-5 py-2 text-sm transition-colors ${
+                        selected
+                          ? 'border-rose bg-rose text-ink'
+                          : 'border-cream/30 text-cream hover:border-cream'
+                      } ${available ? '' : 'opacity-40'}`;
+                      return isDifferentProduct ? (
+                        <Link
+                          key={option.name + name}
+                          to={`/products/${handle}?${variantUriQuery}`}
+                          prefetch="intent"
+                          className={className}
+                        >
+                          {name}
+                        </Link>
+                      ) : (
+                        <Link
+                          key={option.name + name}
+                          to={`?${variantUriQuery}`}
+                          replace
+                          preventScrollReset
+                          aria-disabled={!exists}
+                          className={className}
+                        >
+                          {name}
+                        </Link>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
+
+          <div className="mt-10">
+            <AddToCartButton
+              disabled={!selectedVariant?.availableForSale}
+              lines={
+                selectedVariant
+                  ? [{merchandiseId: selectedVariant.id, quantity: 1}]
+                  : []
+              }
+            >
+              {selectedVariant?.availableForSale ? 'Add to bag' : 'Sold out'}
+            </AddToCartButton>
+          </div>
+
+          {product.descriptionHtml ? (
+            <div
+              className="mt-12 max-w-none text-cream/80 [&_a]:underline [&_li]:ml-5 [&_li]:list-disc"
+              dangerouslySetInnerHTML={{__html: product.descriptionHtml}}
+            />
+          ) : null}
         </div>
 
-        <div className="mt-10">
-          <AddToCartButton
-            disabled={!selectedVariant?.availableForSale}
-            lines={
-              selectedVariant
-                ? [{merchandiseId: selectedVariant.id, quantity: 1}]
-                : []
-            }
-          >
-            {selectedVariant?.availableForSale ? 'Add to bag' : 'Sold out'}
-          </AddToCartButton>
-        </div>
-
-        {product.descriptionHtml ? (
-          <div
-            className="mt-12 max-w-none text-cream/80 [&_a]:underline [&_li]:ml-5 [&_li]:list-disc"
-            dangerouslySetInnerHTML={{__html: product.descriptionHtml}}
-          />
-        ) : null}
+        <Analytics.ProductView
+          data={{
+            products: [
+              {
+                id: product.id,
+                title: product.title,
+                price: selectedVariant?.price?.amount || '0',
+                vendor: product.vendor,
+                variantId: selectedVariant?.id || '',
+                variantTitle: selectedVariant?.title || '',
+                quantity: 1,
+              },
+            ],
+          }}
+        />
       </div>
 
-      <Analytics.ProductView
-        data={{
-          products: [
-            {
-              id: product.id,
-              title: product.title,
-              price: selectedVariant?.price?.amount || '0',
-              vendor: product.vendor,
-              variantId: selectedVariant?.id || '',
-              variantTitle: selectedVariant?.title || '',
-              quantity: 1,
-            },
-          ],
-        }}
-      />
-    </div>
+      <ProductRow title="Complete the Look" products={recommendations} />
+    </>
   );
 }

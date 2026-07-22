@@ -17,6 +17,7 @@ import appStyles from '~/styles/app.css?url';
 import tailwindCss from './styles/tailwind.css?url';
 
 import {SmoothScrollProvider} from '~/animation/SmoothScrollProvider';
+import {ProductTransitionProvider} from '~/animation/ProductTransition';
 import {Header} from '~/components/Header';
 import {Footer} from '~/components/Footer';
 import {ScrollProgress} from '~/components/ScrollProgress';
@@ -94,14 +95,16 @@ export default function App() {
 
   return (
     <Analytics.Provider cart={data.cart} shop={data.shop} consent={data.consent}>
-      <SmoothScrollProvider>
-        <ScrollProgress />
-        <Header />
-        <main>
-          <Outlet />
-        </main>
-        <Footer />
-      </SmoothScrollProvider>
+      <ProductTransitionProvider>
+        <SmoothScrollProvider>
+          <ScrollProgress />
+          <Header />
+          <main>
+            <Outlet />
+          </main>
+          <Footer />
+        </SmoothScrollProvider>
+      </ProductTransitionProvider>
     </Analytics.Provider>
   );
 }

@@ -4,9 +4,10 @@ import {useScrollReveal} from '~/animation/useScrollReveal';
 import type {ProductCardFragment} from 'storefrontapi.generated';
 
 /**
- * A reusable merchandising row: a title + "View all" link over a horizontally
- * scroll-snapping strip of product cards that stagger in on scroll. Renders
- * nothing if the collection is empty (keeps the homepage clean automatically).
+ * A reusable merchandising row: a title (+ optional "View all" link, when a
+ * collection handle is given) over a horizontally scroll-snapping strip of
+ * product cards that stagger in on scroll. Renders nothing if the collection
+ * is empty (keeps the caller clean automatically).
  */
 export function ProductRow({
   title,
@@ -14,7 +15,7 @@ export function ProductRow({
   products,
 }: {
   title: string;
-  handle: string;
+  handle?: string;
   products: ProductCardFragment[];
 }) {
   const row = useScrollReveal<HTMLDivElement>({selector: '.row-card', y: 60});
@@ -24,13 +25,15 @@ export function ProductRow({
     <section className="px-6 py-14 md:px-10">
       <div className="mb-8 flex items-baseline justify-between">
         <h2 className="font-display text-fluid-lg text-blush">{title}</h2>
-        <Link
-          to={`/collections/${handle}`}
-          prefetch="intent"
-          className="text-sm uppercase tracking-widest text-cream/60 transition-colors hover:text-rose"
-        >
-          View all →
-        </Link>
+        {handle ? (
+          <Link
+            to={`/collections/${handle}`}
+            prefetch="intent"
+            className="text-sm uppercase tracking-widest text-cream/60 transition-colors hover:text-rose"
+          >
+            View all →
+          </Link>
+        ) : null}
       </div>
       <div
         ref={row}

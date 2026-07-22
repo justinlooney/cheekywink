@@ -1,12 +1,18 @@
 import {Link} from 'react-router';
 import {Image, Money} from '@shopify/hydrogen';
 import type {ProductCardFragment} from 'storefrontapi.generated';
+import {useProductTransition} from '~/animation/ProductTransition';
 
 /**
  * Grid card with a CSS-driven image zoom + price crossfade on hover. Title and
  * price are STACKED (not side-by-side) — long product titles are common in
  * this catalog and a side-by-side row squeezes the price into almost no
  * space on narrow mobile columns once the title wraps to 3-4 lines.
+ *
+ * A plain left-click hands off to the cinematic zoom transition; a real
+ * `<Link>` underneath still handles keyboard nav, middle-click/new-tab,
+ * modifier-clicks, and screen readers normally (only a bare left-click is
+ * intercepted).
  */
 export function ProductCard({
   product,
@@ -15,15 +21,33 @@ export function ProductCard({
   product: ProductCardFragment;
   loading?: 'eager' | 'lazy';
 }) {
+  const {start} = useProductTransition();
   const price = product.priceRange.minVariantPrice;
   const compareAt = product.compareAtPriceRange?.minVariantPrice;
   const onSale =
     compareAt && Number(compareAt.amount) > Number(price.amount);
+  const to = `/products/${product.handle}`;
+
+  const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (
+      e.defaultPrevented ||
+      e.button !== 0 ||
+      e.metaKey ||
+      e.ctrlKey ||
+      e.shiftKey ||
+      e.altKey
+    ) {
+      return;
+    }
+    e.preventDefault();
+    start(e.currentTarget, to);
+  };
 
   return (
     <Link
-      to={`/products/${product.handle}`}
+      to={to}
       prefetch="intent"
+      onClick={handleClick}
       className="group relative block overflow-hidden rounded-xl bg-cream"
     >
       <div className="aspect-[4/5] overflow-hidden">
