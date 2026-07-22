@@ -3,9 +3,10 @@ import {Image, Money} from '@shopify/hydrogen';
 import type {ProductCardFragment} from 'storefrontapi.generated';
 
 /**
- * Grid card with a CSS-driven image zoom + price crossfade on hover. Kept
- * dependency-free (no JS animation) so it scales to large grids without a
- * ScrollTrigger per card — the parent grid handles staggered entrance reveal.
+ * Grid card with a CSS-driven image zoom + price crossfade on hover. Title and
+ * price are STACKED (not side-by-side) — long product titles are common in
+ * this catalog and a side-by-side row squeezes the price into almost no
+ * space on narrow mobile columns once the title wraps to 3-4 lines.
  */
 export function ProductCard({
   product,
@@ -41,18 +42,15 @@ export function ProductCard({
           </span>
         )}
       </div>
-      <div className="flex items-baseline justify-between gap-3 px-1 py-3">
-        <h3 className="font-display text-lg leading-tight text-ink">
+      <div className="px-1 py-3">
+        <h3 className="line-clamp-2 font-display text-base leading-tight text-ink md:text-lg">
           {product.title}
         </h3>
-        <div className="flex items-baseline gap-2 text-sm">
-          {onSale && (
-            <Money
-              data={compareAt!}
-              className="text-ink/40 line-through"
-            />
-          )}
+        <div className="mt-1.5 flex items-baseline gap-2 text-sm">
           <Money data={price} className="font-medium text-wine" />
+          {onSale && (
+            <Money data={compareAt!} className="text-ink/40 line-through" />
+          )}
         </div>
       </div>
     </Link>

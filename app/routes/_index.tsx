@@ -4,10 +4,12 @@ import {lazy, Suspense, useRef} from 'react';
 import {
   FEATURED_COLLECTION_QUERY,
   HOME_COLLECTIONS_QUERY,
+  MOMENTS_QUERY,
 } from '~/graphql/collections';
 import {ClientOnly} from '~/components/ClientOnly';
 import {CategoryTiles, type CategoryTile} from '~/components/CategoryTiles';
 import {ProductRow} from '~/components/ProductRow';
+import {ShopTheMoment, type Moment} from '~/components/ShopTheMoment';
 import {MagneticButton} from '~/components/MagneticButton';
 import {useTextReveal} from '~/animation/useTextReveal';
 import {gsap} from '~/animation/gsap';
@@ -22,6 +24,30 @@ const HeroScene = lazy(() =>
 // is sparse: 'home-page' (408), 'sale' (115), 'dresses-and-skirts' (61).
 const FEATURED_HANDLE = 'best-sellers';
 
+// Curated copy for the "Shop the Moment" scene, keyed by real collection
+// handle. This WINS over the collection's own admin description — those are
+// full SEO paragraphs meant for search engines, not punchy on-screen captions,
+// and read as a wall of text on a phone. Falls back to the admin description
+// only for a collection with no curated entry here.
+const MOMENT_META: Record<string, {title: string; tagline: string}> = {
+  'wedding-guest-collection': {
+    title: 'Wedding Guest',
+    tagline: 'Effortlessly elegant looks for every celebration.',
+  },
+  'vacation-ready-collection': {
+    title: 'Vacation Ready',
+    tagline: 'Pack light, look unforgettable.',
+  },
+  'concert-ready-collection': {
+    title: 'Concert Ready',
+    tagline: 'Bold pieces built for the front row.',
+  },
+  'formal-dresses': {
+    title: 'Formal Dresses',
+    tagline: 'Polished statements for black-tie moments.',
+  },
+};
+
 export const meta: Route.MetaFunction = () => [
   {title: 'The Cheeky Wink — Elevate Your Everyday Style'},
   {
@@ -33,12 +59,13 @@ export const meta: Route.MetaFunction = () => [
 
 export async function loader({context}: Route.LoaderArgs) {
   const {storefront} = context;
-  // Hero feed + all merchandising collections, fetched in parallel at the edge.
-  const [featuredRes, home] = await Promise.all([
+  // Hero feed + all merchandising collections + occasion scenes, in parallel.
+  const [featuredRes, home, momentsRes] = await Promise.all([
     storefront.query(FEATURED_COLLECTION_QUERY, {
       variables: {handle: FEATURED_HANDLE},
     }),
     storefront.query(HOME_COLLECTIONS_QUERY),
+    storefront.query(MOMENTS_QUERY),
   ]);
 
   const heroItems = (featuredRes.collection?.products?.nodes ?? [])
@@ -74,11 +101,37 @@ export async function loader({context}: Route.LoaderArgs) {
     row(home.denim, 'The Denim Edit'),
   ].filter(Boolean) as {title: string; handle: string; products: any[]}[];
 
-  return {heroItems, tiles, rows};
+  // Build "Shop the Moment" panels — real collections, curated fallback copy.
+  // A missing/renamed handle just drops out (never breaks the page).
+  const buildMoment = (col: any): Moment | null => {
+    if (!col) return null;
+    const meta = MOMENT_META[col.handle];
+    return {
+      handle: col.handle,
+      title: meta?.title ?? col.title,
+      tagline: meta?.tagline || col.description || '',
+      // Only use a REAL collection image (set in Shopify admin). A random
+      // product photo as fallback crops unpredictably — the subject can be
+      // anywhere in frame, and object-position is a per-image guess we have
+      // no way to get right sight-unseen. No image → the panel just shows a
+      // clean branded color instead of a badly-cropped photo.
+      image: col.image ?? null,
+    };
+  };
+  const moments = [
+    momentsRes.weddingGuest,
+    momentsRes.vacationReady,
+    momentsRes.concertReady,
+    momentsRes.formalDresses,
+  ]
+    .map(buildMoment)
+    .filter(Boolean) as Moment[];
+
+  return {heroItems, tiles, rows, moments};
 }
 
 export default function Homepage() {
-  const {heroItems, tiles, rows} = useLoaderData<typeof loader>();
+  const {heroItems, tiles, rows, moments} = useLoaderData<typeof loader>();
   const hero = useRef<HTMLDivElement>(null);
   const title = useTextReveal<HTMLHeadingElement>();
 
@@ -109,6 +162,14 @@ export default function Homepage() {
             </Suspense>
           )}
         </ClientOnly>
+        {/* Text-protection scrim: sits above the 3D canvas, below the copy, so
+            the headline/subtitle stay readable no matter what product photo
+            happens to be spinning behind them (bright cards were washing out
+            the light-colored copy on mobile). */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-[5] h-3/4 bg-gradient-to-t from-ink via-ink/70 to-transparent"
+        />
         <div className="hero-copy relative z-10 max-w-2xl">
           <p className="mb-4 text-sm uppercase tracking-[0.3em] text-gold/90">
             New Season · Editorial
@@ -140,6 +201,9 @@ export default function Homepage() {
           </div>
         </div>
       </section>
+
+      {/* ── Shop the moment (cinematic, pinned on desktop) ──────── */}
+      <ShopTheMoment moments={moments} />
 
       {/* ── Shop by category ─────────────────────────────────── */}
       <CategoryTiles tiles={tiles} />

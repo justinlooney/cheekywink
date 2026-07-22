@@ -22,9 +22,15 @@ function Rig() {
 }
 
 /**
- * The hero <Canvas>. Client-only (lazy-imported by the route). `useNavigate` is
- * called HERE (DOM/Router context) and passed into the Canvas as a callback —
- * R3F's reconciler doesn't share React context, so hooks can't run inside it.
+ * The hero <Canvas>. Client-only (lazy-imported by the route). Studio lighting
+ * is built from <Lightformer> softboxes inside <Environment> — no HDR download
+ * (offline + CSP safe). Reduced motion / no-WebGL → warm gradient poster.
+ *
+ * Mobile note: the card ring's on-screen size is fixed by camera distance/FOV,
+ * not by viewport — on a narrow phone the same camera settings that look right
+ * on desktop make the cards fill/overflow the screen. Pulling the camera back
+ * and narrowing the FOV below the md breakpoint shrinks the whole scene
+ * proportionally with zero changes to the card geometry itself.
  */
 export function HeroScene({items = []}: {items?: HeroItem[]}) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -33,6 +39,7 @@ export function HeroScene({items = []}: {items?: HeroItem[]}) {
   const reduced = useReducedMotion();
   const navigate = useNavigate();
   const tier = typeof window !== 'undefined' ? detectTier() : 'high';
+  const isMobile = typeof window !== 'undefined' ? window.innerWidth < 768 : false;
 
   useEffect(() => setMounted(true), []);
   useEffect(() => {
@@ -61,7 +68,7 @@ export function HeroScene({items = []}: {items?: HeroItem[]}) {
             powerPreference: 'high-performance',
             alpha: true,
           }}
-          camera={{position: [0, 0, 5.2], fov: 42}}
+          camera={{position: [0, 0, isMobile ? 7.5 : 5.2], fov: isMobile ? 34 : 42}}
         >
           <ambientLight intensity={0.5} />
           <spotLight
@@ -75,6 +82,7 @@ export function HeroScene({items = []}: {items?: HeroItem[]}) {
 
           <Suspense fallback={null}>
             <HeroObject items={items} onSelect={onSelect} />
+            {/* Softboxes → subtle sheen on the cream/gold frames (no HDR). */}
             <Environment resolution={256}>
               <Lightformer intensity={3} color="#fff1e0" position={[0, 3, 3]} scale={[7, 3, 1]} />
               <Lightformer intensity={1.6} color="#f4d9d9" position={[-4, 1, 2]} scale={[3, 3, 1]} />
@@ -82,6 +90,7 @@ export function HeroScene({items = []}: {items?: HeroItem[]}) {
             </Environment>
           </Suspense>
 
+          {/* Luxury sparkle dust. */}
           <Sparkles
             count={tier === 'low' ? 30 : 70}
             scale={[9, 7, 9]}

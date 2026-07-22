@@ -673,3 +673,6 @@ html.lenis body {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* Links inherit their container text color (fixes faint menu/footer links) */
+a, a:link, a:visited { color: inherit; }

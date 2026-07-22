@@ -16,7 +16,6 @@ import resetStyles from '~/styles/reset.css?url';
 import appStyles from '~/styles/app.css?url';
 import tailwindCss from './styles/tailwind.css?url';
 
-// Custom immersive shell (replaces the scaffold's <PageLayout>).
 import {SmoothScrollProvider} from '~/animation/SmoothScrollProvider';
 import {Header} from '~/components/Header';
 import {Footer} from '~/components/Footer';
@@ -48,7 +47,6 @@ export function links() {
   ];
 }
 
-// Single loader — cart is a promise (streamed); shop/consent feed Analytics.
 export async function loader(args: Route.LoaderArgs) {
   const {storefront, env, cart} = args.context;
   return {
@@ -111,14 +109,34 @@ export default function App() {
 export function ErrorBoundary() {
   const error = useRouteError();
   const is404 = isRouteErrorResponse(error) && error.status === 404;
+
+  // TEMPORARY debugging aid: show the real error on-screen so it's visible
+  // on a phone with no cable/devtools access. `import.meta.env.DEV` is
+  // build-time-stripped, so this never ships to a production build.
+  let detail: string | null = null;
+  if (import.meta.env.DEV && !is404) {
+    if (error instanceof Error) {
+      detail = `${error.message}\n\n${error.stack ?? ''}`;
+    } else if (isRouteErrorResponse(error)) {
+      detail = `${error.status} ${error.statusText}\n\n${JSON.stringify(error.data)}`;
+    } else {
+      detail = JSON.stringify(error, null, 2);
+    }
+  }
+
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4 text-center">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center">
       <h1 className="font-display text-fluid-lg text-blush">
         {is404 ? 'Lost the wink.' : 'Something slipped.'}
       </h1>
       <a href="/" className="text-rose underline">
         Back to safety
       </a>
+      {detail ? (
+        <pre className="mt-8 max-w-2xl overflow-auto rounded-lg bg-black/60 p-4 text-left text-xs text-lime-300">
+          {detail}
+        </pre>
+      ) : null}
     </div>
   );
 }

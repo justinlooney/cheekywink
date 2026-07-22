@@ -50,6 +50,31 @@ export const HOME_COLLECTIONS_QUERY = `#graphql
   }
 ` as const;
 
+// "Shop the Moment" cinematic scene — a handful of occasion collections,
+// fetched by handle via aliases. A missing handle just returns null; the
+// route filters it out, so the scene degrades to fewer panels, never errors.
+export const MOMENTS_FIELDS_FRAGMENT = `#graphql
+  fragment MomentFields on Collection {
+    id
+    title
+    handle
+    description
+    image { url altText width height }
+    products(first: 1) { nodes { featuredImage { url altText width height } } }
+  }
+` as const;
+
+export const MOMENTS_QUERY = `#graphql
+  ${MOMENTS_FIELDS_FRAGMENT}
+  query ShopTheMoment($country: CountryCode, $language: LanguageCode)
+  @inContext(country: $country, language: $language) {
+    weddingGuest: collection(handle: "wedding-guest-collection") { ...MomentFields }
+    vacationReady: collection(handle: "vacation-ready-collection") { ...MomentFields }
+    concertReady: collection(handle: "concert-ready-collection") { ...MomentFields }
+    formalDresses: collection(handle: "formal-dresses") { ...MomentFields }
+  }
+` as const;
+
 export const COLLECTION_QUERY = `#graphql
   ${PRODUCT_CARD_FRAGMENT}
   query Collection(

@@ -1,132 +1,244 @@
-import {redirect, useLoaderData} from 'react-router';
 import type {Route} from './+types/products.$handle';
+import {useLoaderData, Link} from 'react-router';
+import {useRef} from 'react';
 import {
   getSelectedProductOptions,
-  Analytics,
   useOptimisticVariant,
-  getProductOptions,
   getAdjacentAndFirstAvailableVariants,
   useSelectedOptionInUrlParam,
+  getProductOptions,
+  Image,
+  Money,
+  Analytics,
 } from '@shopify/hydrogen';
-import {ProductPrice} from '~/components/ProductPrice';
-import {ProductImage} from '~/components/ProductImage';
-import {ProductForm} from '~/components/ProductForm';
-import {redirectIfHandleIsLocalized} from '~/lib/redirect';
+import {AddToCartButton} from '~/components/AddToCartButton';
+import {gsap} from '~/animation/gsap';
+import {useGsapContext} from '~/animation/useGsapContext';
 
-export const meta: Route.MetaFunction = ({data}) => {
-  return [
-    {title: `Hydrogen | ${data?.product.title ?? ''}`},
-    {
-      rel: 'canonical',
-      href: `/products/${data?.product.handle}`,
-    },
-  ];
-};
+const PRODUCT_VARIANT_FRAGMENT = `#graphql
+  fragment PdpVariant on ProductVariant {
+    id
+    title
+    availableForSale
+    selectedOptions { name value }
+    image { id url altText width height }
+    price { amount currencyCode }
+    compareAtPrice { amount currencyCode }
+    product { title handle }
+  }
+` as const;
 
-export async function loader(args: Route.LoaderArgs) {
-  // Start fetching non-critical data without blocking time to first byte
-  const deferredData = loadDeferredData(args);
+const PRODUCT_FRAGMENT = `#graphql
+  ${PRODUCT_VARIANT_FRAGMENT}
+  fragment Pdp on Product {
+    id
+    title
+    vendor
+    handle
+    descriptionHtml
+    encodedVariantExistence
+    encodedVariantAvailability
+    options {
+      name
+      optionValues {
+        name
+        firstSelectableVariant { ...PdpVariant }
+        swatch { color image { previewImage { url } } }
+      }
+    }
+    media(first: 10) {
+      nodes {
+        __typename
+        ... on MediaImage { id image { url altText width height } }
+      }
+    }
+    selectedOrFirstAvailableVariant(
+      selectedOptions: $selectedOptions
+      ignoreUnknownOptions: true
+      caseInsensitiveMatch: true
+    ) { ...PdpVariant }
+    adjacentVariants(selectedOptions: $selectedOptions) { ...PdpVariant }
+    seo { title description }
+  }
+` as const;
 
-  // Await the critical data required to render initial state of the page
-  const criticalData = await loadCriticalData(args);
+const PRODUCT_QUERY = `#graphql
+  ${PRODUCT_FRAGMENT}
+  query Pdp(
+    $handle: String!
+    $selectedOptions: [SelectedOptionInput!]!
+    $country: CountryCode
+    $language: LanguageCode
+  ) @inContext(country: $country, language: $language) {
+    product(handle: $handle) { ...Pdp }
+  }
+` as const;
 
-  return {...deferredData, ...criticalData};
-}
+export const meta: Route.MetaFunction = ({data}) => [
+  {title: `${data?.product?.title ?? 'Product'} — The Cheeky Wink`},
+  {name: 'description', content: data?.product?.seo?.description ?? ''},
+];
 
-/**
- * Load data necessary for rendering content above the fold. This is the critical data
- * needed to render the page. If it's unavailable, the whole page should 400 or 500 error.
- */
-async function loadCriticalData({context, params, request}: Route.LoaderArgs) {
+export async function loader({params, request, context}: Route.LoaderArgs) {
   const {handle} = params;
-  const {storefront} = context;
+  if (!handle) throw new Response('Not found', {status: 404});
 
-  if (!handle) {
-    throw new Error('Expected product handle to be defined');
-  }
+  const {product} = await context.storefront.query(PRODUCT_QUERY, {
+    variables: {handle, selectedOptions: getSelectedProductOptions(request)},
+  });
 
-  const [{product}] = await Promise.all([
-    storefront.query(PRODUCT_QUERY, {
-      variables: {handle, selectedOptions: getSelectedProductOptions(request)},
-    }),
-    // Add other queries here, so that they are loaded in parallel
-  ]);
-
-  if (!product?.id) {
-    throw new Response(null, {status: 404});
-  }
-
-  // The API handle might be localized, so redirect to the localized handle
-  redirectIfHandleIsLocalized(request, {handle, data: product});
-
-  return {
-    product,
-  };
-}
-
-/**
- * Load data for rendering content below the fold. This data is deferred and will be
- * fetched after the initial page load. If it's unavailable, the page should still 200.
- * Make sure to not throw any errors here, as it will cause the page to 500.
- */
-function loadDeferredData({context, params}: Route.LoaderArgs) {
-  // Put any API calls that is not critical to be available on first page render
-  // For example: product reviews, product recommendations, social feeds.
-
-  return {};
+  if (!product?.id) throw new Response('Not found', {status: 404});
+  return {product};
 }
 
 export default function Product() {
   const {product} = useLoaderData<typeof loader>();
+  const scope = useRef<HTMLDivElement>(null);
 
-  // Optimistically selects a variant with given available variant information
   const selectedVariant = useOptimisticVariant(
     product.selectedOrFirstAvailableVariant,
     getAdjacentAndFirstAvailableVariants(product),
   );
-
-  // Sets the search param to the selected variant without navigation
-  // only when no search params are set in the url
   useSelectedOptionInUrlParam(selectedVariant.selectedOptions);
 
-  // Get the product options array
   const productOptions = getProductOptions({
     ...product,
     selectedOrFirstAvailableVariant: selectedVariant,
   });
 
-  const {title, descriptionHtml} = product;
+  const images = product.media?.nodes?.filter(
+    (m: any) => m.__typename === 'MediaImage' && m.image,
+  );
+
+  useGsapContext(scope, () => {
+    gsap.from('.pdp-media', {autoAlpha: 0, y: 40, stagger: 0.1, duration: 1});
+    gsap.from('.pdp-info > *', {autoAlpha: 0, y: 24, stagger: 0.08, delay: 0.15});
+  });
 
   return (
-    <div className="product">
-      <ProductImage image={selectedVariant?.image} />
-      <div className="product-main">
-        <h1>{title}</h1>
-        <ProductPrice
-          price={selectedVariant?.price}
-          compareAtPrice={selectedVariant?.compareAtPrice}
-        />
-        <br />
-        <ProductForm
-          productOptions={productOptions}
-          selectedVariant={selectedVariant}
-        />
-        <br />
-        <br />
-        <p>
-          <strong>Description</strong>
-        </p>
-        <br />
-        <div dangerouslySetInnerHTML={{__html: descriptionHtml}} />
-        <br />
+    <div
+      ref={scope}
+      className="grid gap-10 px-6 pb-24 pt-28 md:grid-cols-2 md:gap-16 md:px-10"
+    >
+      {/* Media */}
+      <div className="space-y-4">
+        {selectedVariant?.image ? (
+          <div className="pdp-media overflow-hidden rounded-2xl">
+            <Image
+              data={selectedVariant.image}
+              sizes="(min-width:768px) 50vw, 100vw"
+              className="w-full object-cover"
+            />
+          </div>
+        ) : null}
+        {images?.map((m: any) => (
+          <div key={m.id} className="pdp-media overflow-hidden rounded-2xl">
+            <Image data={m.image} sizes="(min-width:768px) 50vw, 100vw" />
+          </div>
+        ))}
       </div>
+
+      {/* Info */}
+      <div className="pdp-info md:sticky md:top-28 md:h-fit">
+        {product.vendor ? (
+          <p className="text-sm uppercase tracking-widest text-rose">{product.vendor}</p>
+        ) : null}
+        <h1 className="mt-2 font-display text-fluid-lg text-cream">{product.title}</h1>
+        {selectedVariant?.price ? (
+          <div className="mt-4 flex items-baseline gap-3">
+            <Money data={selectedVariant.price} className="text-xl text-blush" />
+            {selectedVariant.compareAtPrice &&
+            Number(selectedVariant.compareAtPrice.amount) >
+              Number(selectedVariant.price.amount) ? (
+              <Money
+                data={selectedVariant.compareAtPrice}
+                className="text-ink/40 text-cream/40 line-through"
+              />
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* Variant options */}
+        <div className="mt-8 space-y-6">
+          {productOptions.map((option) => {
+            if (option.optionValues.length === 1) return null;
+            return (
+              <div key={option.name}>
+                <p className="mb-3 text-sm uppercase tracking-widest text-cream/60">
+                  {option.name}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {option.optionValues.map((value) => {
+                    const {
+                      name,
+                      handle,
+                      variantUriQuery,
+                      selected,
+                      available,
+                      exists,
+                      isDifferentProduct,
+                    } = value;
+                    const className = `rounded-full border px-5 py-2 text-sm transition-colors ${
+                      selected
+                        ? 'border-rose bg-rose text-ink'
+                        : 'border-cream/30 text-cream hover:border-cream'
+                    } ${available ? '' : 'opacity-40'}`;
+                    return isDifferentProduct ? (
+                      <Link
+                        key={option.name + name}
+                        to={`/products/${handle}?${variantUriQuery}`}
+                        prefetch="intent"
+                        className={className}
+                      >
+                        {name}
+                      </Link>
+                    ) : (
+                      <Link
+                        key={option.name + name}
+                        to={`?${variantUriQuery}`}
+                        replace
+                        preventScrollReset
+                        aria-disabled={!exists}
+                        className={className}
+                      >
+                        {name}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-10">
+          <AddToCartButton
+            disabled={!selectedVariant?.availableForSale}
+            lines={
+              selectedVariant
+                ? [{merchandiseId: selectedVariant.id, quantity: 1}]
+                : []
+            }
+          >
+            {selectedVariant?.availableForSale ? 'Add to bag' : 'Sold out'}
+          </AddToCartButton>
+        </div>
+
+        {product.descriptionHtml ? (
+          <div
+            className="mt-12 max-w-none text-cream/80 [&_a]:underline [&_li]:ml-5 [&_li]:list-disc"
+            dangerouslySetInnerHTML={{__html: product.descriptionHtml}}
+          />
+        ) : null}
+      </div>
+
       <Analytics.ProductView
         data={{
           products: [
             {
               id: product.id,
               title: product.title,
-              price: selectedVariant?.price.amount || '0',
+              price: selectedVariant?.price?.amount || '0',
               vendor: product.vendor,
               variantId: selectedVariant?.id || '',
               variantTitle: selectedVariant?.title || '',
@@ -138,95 +250,3 @@ export default function Product() {
     </div>
   );
 }
-
-const PRODUCT_VARIANT_FRAGMENT = `#graphql
-  fragment ProductVariant on ProductVariant {
-    availableForSale
-    compareAtPrice {
-      amount
-      currencyCode
-    }
-    id
-    image {
-      __typename
-      id
-      url
-      altText
-      width
-      height
-    }
-    price {
-      amount
-      currencyCode
-    }
-    product {
-      title
-      handle
-    }
-    selectedOptions {
-      name
-      value
-    }
-    sku
-    title
-    unitPrice {
-      amount
-      currencyCode
-    }
-  }
-` as const;
-
-const PRODUCT_FRAGMENT = `#graphql
-  fragment Product on Product {
-    id
-    title
-    vendor
-    handle
-    descriptionHtml
-    description
-    encodedVariantExistence
-    encodedVariantAvailability
-    options {
-      name
-      optionValues {
-        name
-        firstSelectableVariant {
-          ...ProductVariant
-        }
-        swatch {
-          color
-          image {
-            previewImage {
-              url
-            }
-          }
-        }
-      }
-    }
-    selectedOrFirstAvailableVariant(selectedOptions: $selectedOptions, ignoreUnknownOptions: true, caseInsensitiveMatch: true) {
-      ...ProductVariant
-    }
-    adjacentVariants (selectedOptions: $selectedOptions) {
-      ...ProductVariant
-    }
-    seo {
-      description
-      title
-    }
-  }
-  ${PRODUCT_VARIANT_FRAGMENT}
-` as const;
-
-const PRODUCT_QUERY = `#graphql
-  query Product(
-    $country: CountryCode
-    $handle: String!
-    $language: LanguageCode
-    $selectedOptions: [SelectedOptionInput!]!
-  ) @inContext(country: $country, language: $language) {
-    product(handle: $handle) {
-      ...Product
-    }
-  }
-  ${PRODUCT_FRAGMENT}
-` as const;
